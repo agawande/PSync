@@ -42,7 +42,7 @@ public:
   void
   addContent(const ndn::Name& prefix);
 
-  std::vector<ndn::Name>
+  const std::vector<ndn::Name>&
   getContent() const
   {
     return m_content;

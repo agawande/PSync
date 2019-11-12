@@ -39,6 +39,8 @@ struct PendingEntryInfo
   ndn::scheduler::ScopedEventId expirationEvent;
 };
 
+const ndn::time::milliseconds HELLO_REPLY_FRESHNESS = 1_s;
+
 /**
  * @brief Partial sync logic to publish data names
  *
@@ -62,13 +64,17 @@ public:
    * @param userPrefix The prefix of the first user in the group
    * @param syncReplyFreshness freshness of sync data
    * @param helloReplyFreshness freshness of hello data
+   * @param ibltCompression Compression scheme to use for IBF
+   * @param contentCompression Compression scheme to use for Data content (currently not supported)
    */
   PartialProducer(size_t expectedNumEntries,
                   ndn::Face& face,
                   const ndn::Name& syncPrefix,
                   const ndn::Name& userPrefix,
                   ndn::time::milliseconds helloReplyFreshness = HELLO_REPLY_FRESHNESS,
-                  ndn::time::milliseconds syncReplyFreshness = SYNC_REPLY_FRESHNESS);
+                  ndn::time::milliseconds syncReplyFreshness = SYNC_REPLY_FRESHNESS,
+                  CompressionScheme ibltCompression = CompressionScheme::NONE,
+                  CompressionScheme contentCompression = CompressionScheme::NONE);
 
   /**
    * @brief Publish name to let subscribed consumers know
@@ -120,6 +126,7 @@ PSYNC_PUBLIC_WITH_TESTS_ELSE_PRIVATE:
 PSYNC_PUBLIC_WITH_TESTS_ELSE_PRIVATE:
   std::map<ndn::Name, PendingEntryInfo> m_pendingEntries;
   ndn::ScopedRegisteredPrefixHandle m_registeredPrefix;
+  ndn::time::milliseconds m_helloReplyFreshness;
 };
 
 } // namespace psync

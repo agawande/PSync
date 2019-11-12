@@ -48,6 +48,27 @@ struct MissingDataInfo
   uint64_t highSeq;
 };
 
+enum class CompressionScheme {
+  NONE,
+  ZLIB,
+  GZIP,
+  BZIP2,
+  LZMA,
+  ZSTD
+};
+
+std::shared_ptr<ndn::Buffer>
+compress(CompressionScheme scheme, const char* buffer, size_t bufferSize);
+
+std::shared_ptr<ndn::Buffer>
+decompress(CompressionScheme scheme, const char* buffer, size_t bufferSize);
+
+class Error : public std::runtime_error
+{
+public:
+  using std::runtime_error::runtime_error;
+};
+
 } // namespace psync
 
 #endif // PSYNC_UTIL_HPP

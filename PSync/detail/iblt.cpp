@@ -44,16 +44,8 @@
 */
 
 #include "PSync/detail/iblt.hpp"
-#include "PSync/detail/util.hpp"
-
-#include <boost/iostreams/device/array.hpp>
-#include <boost/iostreams/filtering_stream.hpp>
-#include <boost/iostreams/filter/zlib.hpp>
-#include <boost/iostreams/copy.hpp>
 
 namespace psync {
-
-namespace bio = boost::iostreams;
 
 const size_t N_HASH(3);
 const size_t N_HASHCHECK(11);
@@ -75,7 +67,8 @@ HashTableEntry::isEmpty() const
   return count == 0 && keySum == 0 && keyCheck == 0;
 }
 
-IBLT::IBLT(size_t expectedNumEntries)
+IBLT::IBLT(size_t expectedNumEntries, CompressionScheme scheme)
+  : m_compressionScheme(scheme)
 {
   // 1.5x expectedNumEntries gives very low probability of decoding failure
   size_t nEntries = expectedNumEntries + expectedNumEntries / 2;
@@ -229,6 +222,7 @@ void
 IBLT::appendToName(ndn::Name& name) const
 {
   size_t n = m_hashTable.size();
+  // (3 items in HashTableEntry * size of each item) / size of uint_8
   size_t unitSize = (32 * 3) / 8; // hard coding
   size_t tableSize = unitSize * n;
 
@@ -257,40 +251,26 @@ IBLT::appendToName(ndn::Name& name) const
     table[(i * unitSize) + 11] = 0xFF & (m_hashTable[i].keyCheck >> 24);
   }
 
-  bio::filtering_streambuf<bio::input> in;
-  in.push(bio::zlib_compressor());
-  in.push(bio::array_source(table.data(), table.size()));
-
-  std::stringstream sstream;
-  bio::copy(in, sstream);
-
-  std::string compressedIBF = sstream.str();
-  name.append(compressedIBF.begin(), compressedIBF.end());
+  auto compressedBuf = compress(m_compressionScheme, table.data(), table.size());
+  name.append(compressedBuf->begin(), compressedBuf->end());
 }
 
 std::vector<uint32_t>
 IBLT::extractValueFromName(const ndn::name::Component& ibltName) const
 {
-  std::string compressed(ibltName.value_begin(), ibltName.value_end());
+  auto decompressedBuf = decompress(m_compressionScheme,
+                                    reinterpret_cast<const char*>(ibltName.value()),
+                                    ibltName.value_size());
 
-  bio::filtering_streambuf<bio::input> in;
-  in.push(bio::zlib_decompressor());
-  in.push(bio::array_source(compressed.data(), compressed.size()));
-
-  std::stringstream sstream;
-  bio::copy(in, sstream);
-  std::string ibltStr = sstream.str();
-
-  std::vector<uint8_t> ibltValues(ibltStr.begin(), ibltStr.end());
-  size_t n = ibltValues.size() / 4;
+  size_t n = decompressedBuf->size() / 4;
 
   std::vector<uint32_t> values(n, 0);
 
   for (size_t i = 0; i < 4 * n; i += 4) {
-    uint32_t t = (ibltValues[i + 3] << 24) +
-                 (ibltValues[i + 2] << 16) +
-                 (ibltValues[i + 1] << 8)  +
-                 ibltValues[i];
+    uint32_t t = (decompressedBuf->at(i + 3) << 24) +
+                 (decompressedBuf->at(i + 2) << 16) +
+                 (decompressedBuf->at(i + 1) << 8)  +
+                  decompressedBuf->at(i);
     values[i / 4] = t;
   }
 

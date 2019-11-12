@@ -35,8 +35,9 @@ ProducerBase::ProducerBase(size_t expectedNumEntries,
                            const ndn::Name& syncPrefix,
                            const ndn::Name& userPrefix,
                            ndn::time::milliseconds syncReplyFreshness,
-                           ndn::time::milliseconds helloReplyFreshness)
-  : m_iblt(expectedNumEntries)
+                           CompressionScheme ibltCompression,
+                           CompressionScheme contentCompression)
+  : m_iblt(expectedNumEntries, ibltCompression)
   , m_expectedNumEntries(expectedNumEntries)
   , m_threshold(expectedNumEntries/2)
   , m_face(face)
@@ -44,9 +45,10 @@ ProducerBase::ProducerBase(size_t expectedNumEntries,
   , m_syncPrefix(syncPrefix)
   , m_userPrefix(userPrefix)
   , m_syncReplyFreshness(syncReplyFreshness)
-  , m_helloReplyFreshness(helloReplyFreshness)
   , m_segmentPublisher(m_face, m_keyChain)
   , m_rng(ndn::random::getRandomNumberEngine())
+  , m_ibltCompression(ibltCompression)
+  , m_contentCompression(contentCompression)
 {
   addUserNode(userPrefix);
 }

@@ -72,6 +72,8 @@ public:
    * @param onUpdateCallBack The call back to be called when there is new data
    * @param syncInterestLifetime lifetime of the sync interest
    * @param syncReplyFreshness freshness of sync data
+   * @param ibltCompression Compression scheme to use for IBF
+   * @param contentCompression Compression scheme to use for Data content
    */
   FullProducer(size_t expectedNumEntries,
                ndn::Face& face,
@@ -79,7 +81,9 @@ public:
                const ndn::Name& userPrefix,
                const UpdateCallback& onUpdateCallBack,
                ndn::time::milliseconds syncInterestLifetime = SYNC_INTEREST_LIFTIME,
-               ndn::time::milliseconds syncReplyFreshness = SYNC_REPLY_FRESHNESS);
+               ndn::time::milliseconds syncReplyFreshness = SYNC_REPLY_FRESHNESS,
+               CompressionScheme ibltCompression = CompressionScheme::ZLIB,
+               CompressionScheme contentCompression = CompressionScheme::ZLIB);
 
   ~FullProducer();
 

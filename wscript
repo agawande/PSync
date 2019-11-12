@@ -7,6 +7,11 @@ VERSION = '0.1.0'
 APPNAME = 'PSync'
 GIT_TAG_PREFIX = ''
 
+BOOST_COMPRESSION_CODE = '''
+#include <boost/iostreams/filter/{0}.hpp>
+int main() {{ boost::iostreams::{0}_compressor test; }}
+'''
+
 def options(opt):
     opt.load(['compiler_c', 'compiler_cxx', 'gnu_dirs'])
     opt.load(['default-compiler-flags', 'coverage', 'sanitizers',
@@ -35,6 +40,12 @@ def configure(conf):
         boost_libs.append('unit_test_framework')
 
     conf.check_boost(lib=boost_libs, mt=True)
+
+    for scheme in ['zlib', 'gzip', 'bzip2', 'lzma', 'zstd']:
+        conf.check_cxx(fragment=BOOST_COMPRESSION_CODE.format(scheme),
+                       use='BOOST', execute=False, mandatory=False,
+                       msg='Checking for {} support in boost iostreams'.format(scheme),
+                       define_name='HAVE_{}'.format(scheme.upper()))
 
     conf.check_compiler_flags()
 
