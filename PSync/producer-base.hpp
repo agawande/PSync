@@ -125,9 +125,11 @@ PSYNC_PUBLIC_WITH_TESTS_ELSE_PROTECTED:
    *
    * @param prefix prefix of the update
    * @param seq sequence number of the update
+   * @param blockPtr associated block to piggy back data
    */
   void
-  updateSeqNo(const ndn::Name& prefix, uint64_t seq);
+  updateSeqNo(const ndn::Name& prefix, uint64_t seq,
+              std::shared_ptr<ndn::Block> blockPtr = nullptr);
 
   bool
   isUserNode(const ndn::Name& prefix) const
@@ -169,6 +171,8 @@ PSYNC_PUBLIC_WITH_TESTS_ELSE_PROTECTED:
   std::map<ndn::Name, uint32_t> m_prefix2hash;
   // Value is prefix (and not prefix/seqNo)
   std::map<uint32_t, ndn::Name> m_hash2prefix;
+
+  std::map<ndn::Name, std::shared_ptr<ndn::Block>> m_nameAndBlock;
 
   ndn::Face& m_face;
   ndn::KeyChain m_keyChain;

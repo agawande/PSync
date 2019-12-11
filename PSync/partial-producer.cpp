@@ -184,7 +184,7 @@ PartialProducer::onSyncInterest(const ndn::Name& prefix, const ndn::Interest& in
 
   NDN_LOG_TRACE("m_threshold: " << m_threshold << " Total: " << positive.size() + negative.size());
 
-  if (positive.size() + negative.size() >= m_threshold || !state.getContent().empty()) {
+  if (positive.size() + negative.size() >= m_threshold || !state.getContentWithBlock().empty()) {
 
     // send back data
     ndn::Name syncDataName = interestName;

@@ -85,7 +85,8 @@ ProducerBase::removeUserNode(const ndn::Name& prefix)
 }
 
 void
-ProducerBase::updateSeqNo(const ndn::Name& prefix, uint64_t seq)
+ProducerBase::updateSeqNo(const ndn::Name& prefix, uint64_t seq,
+                          std::shared_ptr<ndn::Block> blockPtr)
 {
   NDN_LOG_DEBUG("UpdateSeq: " << prefix << " " << seq);
 
@@ -115,6 +116,10 @@ ProducerBase::updateSeqNo(const ndn::Name& prefix, uint64_t seq)
       m_hash2prefix.erase(hash);
       m_iblt.erase(hash);
     }
+
+    if (blockPtr) {
+      m_nameAndBlock.erase(prefixWithSeq);
+    }
   }
 
   // Insert the new seq no
@@ -124,6 +129,9 @@ ProducerBase::updateSeqNo(const ndn::Name& prefix, uint64_t seq)
   m_prefix2hash[prefixWithSeq] = newHash;
   m_hash2prefix[newHash] = prefix;
   m_iblt.insert(newHash);
+  if (blockPtr) {
+    m_nameAndBlock.emplace(prefixWithSeq, blockPtr);
+  }
 }
 
 void

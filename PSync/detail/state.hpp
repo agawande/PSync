@@ -27,11 +27,18 @@ namespace psync {
 namespace tlv {
 
 enum {
-  PSyncContent = 128
+  PSyncContent = 128,
+  PSyncDataBlock = 129
 };
 
 } // namespace tlv
 
+/**
+ * @brief State = tlv::PSyncContent TLV-LENGTH *(Name [PSyncDataBlock])
+ *
+ * PSyncDataBlock = tlv::PSyncDataBlock TLV-LENGTH Block
+ *
+ */
 class State
 {
 public:
@@ -40,12 +47,12 @@ public:
   State() = default;
 
   void
-  addContent(const ndn::Name& prefix);
+  addContent(const ndn::Name& prefix, std::shared_ptr<ndn::Block> = nullptr);
 
-  const std::vector<ndn::Name>&
-  getContent() const
+  const std::map<ndn::Name, std::shared_ptr<ndn::Block>>&
+  getContentWithBlock() const
   {
-    return m_content;
+    return m_contentWithBlock;
   }
 
   const ndn::Block&
@@ -59,14 +66,17 @@ public:
   wireDecode(const ndn::Block& wire);
 
 private:
-  std::vector<ndn::Name> m_content;
+  std::map<ndn::Name, std::shared_ptr<ndn::Block>> m_contentWithBlock;
   mutable ndn::Block m_wire;
 };
 
 NDN_CXX_DECLARE_WIRE_ENCODE_INSTANTIATIONS(State);
 
 std::ostream&
-operator<<(std::ostream& os, const State& State);
+operator<<(std::ostream& os, const State& state);
+
+bool
+operator==(const State& state1, const State& state2);
 
 } // namespace psync
 

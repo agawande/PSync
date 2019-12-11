@@ -73,9 +73,27 @@ FullProducer::publishName(const ndn::Name& prefix, ndn::optional<uint64_t> seq)
 
   uint64_t newSeq = seq.value_or(m_prefixes[prefix] + 1);
 
-  NDN_LOG_INFO("Publish: "<< prefix << "/" << newSeq);
+  NDN_LOG_INFO("Publish: " << prefix << "/" << newSeq);
 
   updateSeqNo(prefix, newSeq);
+
+  satisfyPendingInterests();
+}
+
+void
+FullProducer::publishNameAndData(const ndn::Block& block, const ndn::Name& prefix,
+                                 ndn::optional<uint64_t> seq)
+{
+  if (m_prefixes.find(prefix) == m_prefixes.end()) {
+    NDN_LOG_WARN("Prefix not added: " << prefix);
+    return;
+  }
+
+  uint64_t newSeq = seq.value_or(m_prefixes[prefix] + 1);
+
+  NDN_LOG_INFO("Publish: " << prefix << "/" << newSeq);
+
+  updateSeqNo(prefix, newSeq, std::make_shared<ndn::Block>(block));
 
   satisfyPendingInterests();
 }
@@ -184,11 +202,19 @@ FullProducer::onSyncInterest(const ndn::Name& prefixName, const ndn::Interest& i
       State state;
       for (const auto& content : m_prefixes) {
         if (content.second != 0) {
-          state.addContent(ndn::Name(content.first).appendNumber(content.second));
+          ndn::Name prefixWithSeq(ndn::Name(content.first).appendNumber(content.second));
+
+          // if seq in m_prefixes is not zero, then the following will exist
+          if (m_nameAndBlock[prefixWithSeq]) {
+            state.addContent(prefixWithSeq, m_nameAndBlock[prefixWithSeq]);
+          }
+          else {
+            state.addContent(prefixWithSeq);
+          }
         }
       }
 
-      if (!state.getContent().empty()) {
+      if (!state.getContentWithBlock().empty()) {
         sendSyncData(interest.getName(), state.wireEncode());
       }
 
@@ -201,11 +227,18 @@ FullProducer::onSyncInterest(const ndn::Name& prefixName, const ndn::Interest& i
     const ndn::Name& prefix = m_hash2prefix[hash];
     // Don't sync up sequence number zero
     if (m_prefixes[prefix] != 0 && !isFutureHash(prefix.toUri(), negative)) {
-      state.addContent(ndn::Name(prefix).appendNumber(m_prefixes[prefix]));
+      ndn::Name prefixWithSeq(ndn::Name(prefix).appendNumber(m_prefixes[prefix]));
+      // if seq in m_prefixes is not zero, then the following will exist
+      if (m_nameAndBlock[prefixWithSeq]) {
+          state.addContent(prefixWithSeq, m_nameAndBlock[prefixWithSeq]);
+      }
+      else {
+        state.addContent(prefixWithSeq);
+      }
     }
   }
 
-  if (!state.getContent().empty()) {
+  if (!state.getContentWithBlock().empty()) {
     NDN_LOG_DEBUG("Sending sync content: " << state);
     sendSyncData(interestName, state.wireEncode());
     return;
@@ -268,13 +301,13 @@ FullProducer::onSyncData(const ndn::Interest& interest, const ndn::ConstBufferPt
 
   NDN_LOG_DEBUG("Sync Data Received: " << state);
 
-  for (const auto& content : state.getContent()) {
-    const ndn::Name& prefix = content.getPrefix(-1);
-    uint64_t seq = content.get(content.size() - 1).toNumber();
+  for (const auto& content : state.getContentWithBlock()) {
+    const ndn::Name& prefix = content.first.getPrefix(-1);
+    uint64_t seq = content.first.get(content.first.size() - 1).toNumber();
 
     if (m_prefixes.find(prefix) == m_prefixes.end() || m_prefixes[prefix] < seq) {
-      updates.push_back(MissingDataInfo{prefix, m_prefixes[prefix] + 1, seq});
-      updateSeqNo(prefix, seq);
+      updates.push_back(MissingDataInfo{prefix, m_prefixes[prefix] + 1, seq, content.second});
+      updateSeqNo(prefix, seq, content.second);
       // We should not call satisfyPendingSyncInterests here because we just
       // got data and deleted pending interest by calling deletePendingFullSyncInterests
       // But we might have interests not matching to this interest that might not have deleted
@@ -320,11 +353,18 @@ FullProducer::satisfyPendingInterests()
       ndn::Name prefix = m_hash2prefix[hash];
 
       if (m_prefixes[prefix] != 0) {
-        state.addContent(ndn::Name(prefix).appendNumber(m_prefixes[prefix]));
+        ndn::Name prefixWithSeq(ndn::Name(prefix).appendNumber(m_prefixes[prefix]));
+        // if seq in m_prefixes is not zero, then the following will exist
+        if (m_nameAndBlock[prefixWithSeq]) {
+          state.addContent(prefixWithSeq, m_nameAndBlock[prefixWithSeq]);
+        }
+        else {
+          state.addContent(prefixWithSeq);
+        }
       }
     }
 
-    if (!state.getContent().empty()) {
+    if (!state.getContentWithBlock().empty()) {
       NDN_LOG_DEBUG("Satisfying sync content: " << state);
       sendSyncData(it->first, state.wireEncode());
       it = m_pendingEntries.erase(it);

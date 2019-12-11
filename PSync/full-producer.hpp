@@ -101,6 +101,20 @@ public:
   void
   publishName(const ndn::Name& prefix, ndn::optional<uint64_t> seq = ndn::nullopt);
 
+    /**
+   * @brief Publish name to let others know
+   *
+   * Same as publishName except block is provided to piggy back content
+   * associated with prefix and seq
+   *
+   * @param block content to be associated with the prefix and seq
+   * @param prefix the prefix to be updated
+   * @param seq the sequence number of the prefix
+   */
+  void
+  publishNameAndData(const ndn::Block& block, const ndn::Name& prefix,
+                     ndn::optional<uint64_t> seq = ndn::nullopt);
+
 PSYNC_PUBLIC_WITH_TESTS_ELSE_PRIVATE:
   /**
    * @brief Send sync interest for full synchronization

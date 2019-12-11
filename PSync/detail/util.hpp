@@ -46,6 +46,7 @@ struct MissingDataInfo
   ndn::Name prefix;
   uint64_t lowSeq;
   uint64_t highSeq;
+  std::shared_ptr<ndn::Block> blockForHighSeq;
 };
 
 enum class CompressionScheme {

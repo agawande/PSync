@@ -135,14 +135,14 @@ Consumer::onHelloData(const ndn::ConstBufferPtr& bufferPtr)
 
   NDN_LOG_DEBUG("Hello Data:  " << state);
 
-  for (const auto& content : state.getContent()) {
-    const ndn::Name& prefix = content.getPrefix(-1);
-    uint64_t seq = content.get(content.size()-1).toNumber();
+  for (const auto& content : state.getContentWithBlock()) {
+    const ndn::Name& prefix = content.first.getPrefix(-1);
+    uint64_t seq = content.first.get(content.first.size() - 1).toNumber();
     // If consumer is subscribed then prefix must already be present in
     // m_prefixes (see addSubscription). So [] operator is safe to use.
     if (isSubscribed(prefix) && seq > m_prefixes[prefix]) {
       // In case we are behind on this prefix and consumer is subscribed to it
-      updates.push_back(MissingDataInfo{prefix, m_prefixes[prefix] + 1, seq});
+      updates.push_back(MissingDataInfo{prefix, m_prefixes[prefix] + 1, seq, content.second});
       m_prefixes[prefix] = seq;
     }
     availableSubscriptions.push_back(prefix);
@@ -226,14 +226,14 @@ Consumer::onSyncData(const ndn::ConstBufferPtr& bufferPtr)
 
   std::vector<MissingDataInfo> updates;
 
-  for (const auto& content : state.getContent()) {
-    NDN_LOG_DEBUG(content);
-    const ndn::Name& prefix = content.getPrefix(-1);
-    uint64_t seq = content.get(content.size() - 1).toNumber();
+  for (const auto& content : state.getContentWithBlock()) {
+    NDN_LOG_DEBUG(content.first);
+    const ndn::Name& prefix = content.first.getPrefix(-1);
+    uint64_t seq = content.first.get(content.first.size() - 1).toNumber();
     if (m_prefixes.find(prefix) == m_prefixes.end() || seq > m_prefixes[prefix]) {
       // If this is just the next seq number then we had already informed the consumer about
       // the previous sequence number and hence seq low and seq high should be equal to current seq
-      updates.push_back(MissingDataInfo{prefix, m_prefixes[prefix] + 1, seq});
+      updates.push_back(MissingDataInfo{prefix, m_prefixes[prefix] + 1, seq, content.second});
       m_prefixes[prefix] = seq;
     }
     // Else updates will be empty and consumer will not be notified.

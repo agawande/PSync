@@ -29,9 +29,10 @@ State::State(const ndn::Block& block)
 }
 
 void
-State::addContent(const ndn::Name& prefix)
+State::addContent(const ndn::Name& prefix, std::shared_ptr<ndn::Block> block)
 {
-  m_content.emplace_back(prefix);
+  m_contentWithBlock.emplace(prefix, block);
+  m_wire.reset();
 }
 
 const ndn::Block&
@@ -57,9 +58,11 @@ State::wireEncode(ndn::EncodingImpl<TAG>& block) const
 {
   size_t totalLength = 0;
 
-  for (std::vector<ndn::Name>::const_reverse_iterator it = m_content.rbegin();
-    it != m_content.rend(); ++it) {
-    totalLength += it->wireEncode(block);
+  for (auto it = m_contentWithBlock.rbegin(); it != m_contentWithBlock.rend(); ++it) {
+    if (it->second) {
+      totalLength += block.prependBlock(ndn::Block(tlv::PSyncDataBlock, *it->second));
+    }
+    totalLength += it->first.wireEncode(block);
   }
 
   totalLength += block.prependVarNumber(totalLength);
@@ -82,9 +85,14 @@ State::wireDecode(const ndn::Block& wire)
   wire.parse();
   m_wire = wire;
 
+  auto mapIt = m_contentWithBlock.begin();
   for (auto it = m_wire.elements_begin(); it != m_wire.elements_end(); ++it) {
     if (it->type() == ndn::tlv::Name) {
-      m_content.emplace_back(*it);
+      mapIt = m_contentWithBlock.emplace(ndn::Name(*it), nullptr).first;
+    }
+    else if (it->type() == tlv::PSyncDataBlock) {
+      it->parse();
+      mapIt->second = std::make_shared<ndn::Block>(it->value(), it->value_size());
     }
     else {
       BOOST_THROW_EXCEPTION(ndn::tlv::Error("Expected Name Block, but Block is of type: #" +
@@ -96,13 +104,28 @@ State::wireDecode(const ndn::Block& wire)
 std::ostream&
 operator<<(std::ostream& os, const State& state)
 {
-  auto content = state.getContent();
+  auto content = state.getContentWithBlock();
+  auto it = content.begin();
 
-  os << "[";
-  std::copy(content.begin(), content.end(), ndn::make_ostream_joiner(os, ", "));
+  os << "[" << it->first;
+  for (++it; it != content.end(); ++it) {
+    os << ", " << it->first;
+  }
   os << "]";
 
   return os;
+}
+
+bool
+operator==(const State& state1, const State& state2)
+{
+  auto lhs = state1.getContentWithBlock();
+  auto rhs = state2.getContentWithBlock();
+  return lhs.size() == rhs.size() &&
+         std::equal(lhs.begin(), lhs.end(), rhs.begin(),
+                    [] (auto a, auto b) { return a.first == b.first &&
+                                                 ((a.second == nullptr && b.second == nullptr) ||
+                                                 (*a.second == *b.second)); });
 }
 
 } // namespace psync

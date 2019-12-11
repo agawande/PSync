@@ -22,6 +22,9 @@
 #include <boost/test/unit_test.hpp>
 #include <ndn-cxx/name.hpp>
 #include <ndn-cxx/data.hpp>
+#include <ndn-cxx/security/key-chain.hpp>
+
+#include <iostream>
 
 namespace psync {
 
@@ -47,10 +50,9 @@ BOOST_AUTO_TEST_CASE(EncodeDecode)
 
   ndn::Block block(std::move(bufferPtr));
 
-  State rcvdState;
-  rcvdState.wireDecode(block);
+  State rcvdState(block);
 
-  BOOST_CHECK(state.getContent() == rcvdState.getContent());
+  BOOST_CHECK_EQUAL(state, rcvdState);
 }
 
 BOOST_AUTO_TEST_CASE(EmptyContent)
@@ -71,7 +73,45 @@ BOOST_AUTO_TEST_CASE(EmptyContent)
   BOOST_CHECK_NO_THROW(State state2(block));
 
   State state2(block);
-  BOOST_CHECK_EQUAL(state2.getContent().size(), 0);
+  BOOST_CHECK_EQUAL(state2.getContentWithBlock().size(), 0);
+}
+
+BOOST_AUTO_TEST_CASE(PiggyBackContent)
+{
+  State state;
+  Data data1("/test1/hello");
+  Data data2("/test1/hello2");
+
+  ndn::KeyChain keyChain;
+  keyChain.sign(data1);
+  keyChain.sign(data2);
+
+  state.addContent(ndn::Name("test1"), std::make_shared<ndn::Block>(data1.wireEncode()));
+  state.addContent(ndn::Name("test2"), std::make_shared<ndn::Block>(data2.wireEncode()));
+
+  State state2(state.wireEncode());
+
+  BOOST_CHECK_EQUAL(state, state2);
+}
+
+BOOST_AUTO_TEST_CASE(MixedContent)
+{
+  State state;
+  Data data1("/test1/hello");
+  Data data2("/test1/hello2");
+
+  ndn::KeyChain keyChain;
+  keyChain.sign(data1);
+  keyChain.sign(data2);
+
+  state.addContent(ndn::Name("test0"));
+  state.addContent(ndn::Name("test1"), std::make_shared<ndn::Block>(data1.wireEncode()));
+  state.addContent(ndn::Name("test2"));
+  state.addContent(ndn::Name("test3"), std::make_shared<ndn::Block>(data2.wireEncode()));
+
+  State state2(state.wireEncode());
+
+  BOOST_CHECK_EQUAL(state, state2);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
