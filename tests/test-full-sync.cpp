@@ -423,17 +423,17 @@ BOOST_AUTO_TEST_CASE(DelayedSecondSegment)
 
   // Get data name from face and increase segment number to form next interest
   Name dataName = faces[0]->sentData.front().getName();
-  Name interestName = dataName.getSubName(0, dataName.size() - 1);
+  Name interestName = dataName.getSubName(0, dataName.size() - 2);
+  interestName.appendVersion();
   interestName.appendSegment(1);
   faces[0]->sentData.clear();
 
-  nodes[0]->onSyncInterest(syncPrefix, Interest(interestName));
-  advanceClocks(ndn::time::milliseconds(10));
+  nodes[0]->onSyncInterest(syncPrefix, Interest(interestName.getSubName(0, interestName.size() - 2)));
+  advanceClocks(ndn::time::milliseconds(2));
+  faces[0]->sentData.clear();
 
   // Should have repopulated SegmentPublisher
   BOOST_CHECK_EQUAL(nodes[0]->m_segmentPublisher.m_ims.size(), 2);
-  // Should have received the second data segment this time
-  BOOST_CHECK_EQUAL(faces[0]->sentData.front().getName()[-1].toSegment(), 1);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -48,7 +48,7 @@ FullProducer::FullProducer(const size_t expectedNumEntries,
 {
   m_registeredPrefix = m_face.setInterestFilter(
                          ndn::InterestFilter(m_syncPrefix).allowLoopback(false),
-                         std::bind(&FullProducer::onSyncInterest, this, _1, _2),
+                         std::bind(&FullProducer::onSyncInterest, this, _1, _2, false),
                          std::bind(&FullProducer::onRegisterFailed, this, _1, _2));
 
   // Should we do this after setInterestFilter success call back
@@ -149,7 +149,8 @@ FullProducer::sendSyncInterest()
 }
 
 void
-FullProducer::onSyncInterest(const ndn::Name& prefixName, const ndn::Interest& interest)
+FullProducer::onSyncInterest(const ndn::Name& prefixName, const ndn::Interest& interest,
+                             bool isTimedProcessing)
 {
   // TODO: answer only segments from store.
   if (m_segmentPublisher.replyFromStore(interest.getName())) {
@@ -195,16 +196,37 @@ FullProducer::onSyncInterest(const ndn::Name& prefixName, const ndn::Interest& i
                   << " negative: " << negative.size() << " m_threshold: "
                   << m_threshold);
 
-    // Send all data if greater then threshold, else send positive below as usual
-    // Or send if we can't get neither positive nor negative differences
-    if (positive.size() + negative.size() >= m_threshold ||
-        (positive.size() == 0 && negative.size() == 0)) {
+    auto numOwnElements = m_iblt.getNumElements();
+    auto numRcvdElements = iblt.getNumElements();
+
+    if (numRcvdElements > numOwnElements) {
+      if (!isTimedProcessing) {
+        if (std::find(m_waitingInterest.begin(), m_waitingInterest.end(), interest.getName()) == m_waitingInterest.end()) {
+          auto after = ndn::time::milliseconds(m_jitter(m_rng));
+          NDN_LOG_TRACE("On dfailure, will process after: " << after);
+          m_waitingInterest.push_back(interest.getName());
+          m_scheduler.schedule(after, [=] { onSyncInterest(prefixName, interest, true); });
+        }
+      }
+      else { // it is time we deal with this
+        std::remove(m_waitingInterest.begin(), m_waitingInterest.end(), interest.getName());
+        NDN_LOG_TRACE("On dfailure, Nobody helping us, send sync interest");
+        sendSyncInterest();
+      }
+
+      return;
+    }
+
+    if (numOwnElements >= numRcvdElements) {
+      if (numOwnElements == numRcvdElements && positive.size() == 0 && negative.size() > 0) {
+        NDN_LOG_TRACE("Positive.size() == 0 and Negative.size > 0");
+        return;
+      }
+
       State state;
       for (const auto& content : m_prefixes) {
         if (content.second != 0) {
           ndn::Name prefixWithSeq(ndn::Name(content.first).appendNumber(content.second));
-
-          // if seq in m_prefixes is not zero, then the following will exist
           if (m_nameAndBlock[prefixWithSeq]) {
             state.addContent(prefixWithSeq, m_nameAndBlock[prefixWithSeq]);
           }
@@ -213,11 +235,28 @@ FullProducer::onSyncInterest(const ndn::Name& prefixName, const ndn::Interest& i
           }
         }
       }
-
       if (!state.getContentWithBlock().empty()) {
-        sendSyncData(interest.getName(), state.wireEncode());
+        NDN_LOG_TRACE("Sending Full Sync Data for: " << std::hash<ndn::Name>{}(interestName) << " " << state);
+        sendSyncData(interestName, state.wireEncode(), true);
       }
 
+      return;
+    }
+  }
+
+  if (negative.size() > 0) {
+    if (!isTimedProcessing) {
+      if (std::find(m_waitingInterest.begin(), m_waitingInterest.end(), interest.getName()) == m_waitingInterest.end()) {
+        auto after = ndn::time::milliseconds(m_jitter(m_rng));
+        NDN_LOG_TRACE("Will process after: " << after);
+        m_waitingInterest.push_back(interest.getName());
+        m_scheduler.schedule(after, [=] { onSyncInterest(prefixName, interest, true); });
+      }
+    }
+    else {
+      std::remove(m_waitingInterest.begin(), m_waitingInterest.end(), interest.getName());
+      NDN_LOG_TRACE("Nobody helping us, send sync interest");
+      sendSyncInterest();
       return;
     }
   }
@@ -244,6 +283,11 @@ FullProducer::onSyncInterest(const ndn::Name& prefixName, const ndn::Interest& i
     return;
   }
 
+  if (positive.size() != 0) {
+    // future hashes were detected and we should not store this Interest
+    return;
+  }
+
   auto& entry = m_pendingEntries.emplace(interestName, PendingEntryInfoFull{iblt, {}}).first->second;
   entry.expirationEvent = m_scheduler.schedule(interest.getInterestLifetime(),
                           [this, interest] {
@@ -253,15 +297,23 @@ FullProducer::onSyncInterest(const ndn::Name& prefixName, const ndn::Interest& i
 }
 
 void
-FullProducer::sendSyncData(const ndn::Name& name, const ndn::Block& block)
+FullProducer::sendSyncData(const ndn::Name& name, const ndn::Block& block,
+                           bool deletePending, bool lowFreshness)
 {
   NDN_LOG_DEBUG("Checking if data will satisfy our own pending interest");
 
-  ndn::Name nameWithIblt;
-  m_iblt.appendToName(nameWithIblt);
+  ndn::Name dataName(name);
 
   auto compressed = compress(m_contentCompression, reinterpret_cast<const char*>(block.wire()), block.size());
   auto content = ndn::makeBinaryBlock(ndn::tlv::Content, compressed->data(), compressed->size());
+
+  ndn::time::milliseconds freshness;
+  if (lowFreshness) {
+    freshness = 10_ms;
+  }
+  else {
+    freshness = m_syncReplyFreshness;
+  }
 
   // checking if our own interest got satisfied
   if (m_outstandingInterestName == name) {
@@ -276,14 +328,18 @@ FullProducer::sendSyncData(const ndn::Name& name, const ndn::Block& block)
     NDN_LOG_DEBUG("Sending Sync Data");
 
     // Send data after removing pending sync interest on face
-    m_segmentPublisher.publish(name, name, content, m_syncReplyFreshness);
+    m_segmentPublisher.publish(name, dataName, content, freshness);
 
     NDN_LOG_TRACE("Renewing sync interest");
     sendSyncInterest();
   }
   else {
     NDN_LOG_DEBUG("Sending Sync Data");
-    m_segmentPublisher.publish(name, name, content, m_syncReplyFreshness);
+    m_segmentPublisher.publish(name, dataName, content, freshness);
+  }
+
+  if (deletePending) {
+    deletePendingInterests(name);
   }
 }
 
@@ -366,7 +422,7 @@ FullProducer::satisfyPendingInterests()
 
     if (!state.getContentWithBlock().empty()) {
       NDN_LOG_DEBUG("Satisfying sync content: " << state);
-      sendSyncData(it->first, state.wireEncode());
+      sendSyncData(it->first, state.wireEncode(), false);
       it = m_pendingEntries.erase(it);
     }
     else {

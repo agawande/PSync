@@ -161,6 +161,9 @@ public:
   std::vector<uint32_t>
   extractValueFromName(const ndn::name::Component& ibltName) const;
 
+  size_t
+  getNumElements() const;
+
 private:
   void
   update(int plusOrMinus, uint32_t key);

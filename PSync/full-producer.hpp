@@ -141,7 +141,8 @@ PSYNC_PUBLIC_WITH_TESTS_ELSE_PRIVATE:
    * @param interest the interest we got
    */
   void
-  onSyncInterest(const ndn::Name& prefixName, const ndn::Interest& interest);
+  onSyncInterest(const ndn::Name& prefixName, const ndn::Interest& interest,
+                 bool isTimedProcessing = false);
 
 private:
   /**
@@ -155,7 +156,8 @@ private:
    * @param block the content of the data
    */
   void
-  sendSyncData(const ndn::Name& name, const ndn::Block& block);
+  sendSyncData(const ndn::Name& name, const ndn::Block& block,
+               bool deletePending = true, bool lowFreshness = false);
 
   /**
    * @brief Process sync data
@@ -209,6 +211,7 @@ private:
   ndn::Name m_outstandingInterestName;
   ndn::ScopedRegisteredPrefixHandle m_registeredPrefix;
   std::shared_ptr<ndn::util::SegmentFetcher> m_fetcher;
+  std::vector<ndn::Name> m_waitingInterest;
 };
 
 } // namespace psync

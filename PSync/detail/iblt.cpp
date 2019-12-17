@@ -277,4 +277,14 @@ IBLT::extractValueFromName(const ndn::name::Component& ibltName) const
   return values;
 }
 
+size_t
+IBLT::getNumElements() const
+{
+  size_t totalCount = 0;
+  for (const auto& entry : m_hashTable) {
+    totalCount += entry.count;
+  }
+  return totalCount / N_HASH;
+}
+
 } // namespace psync

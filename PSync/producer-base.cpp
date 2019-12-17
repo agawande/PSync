@@ -107,7 +107,8 @@ ProducerBase::updateSeqNo(const ndn::Name& prefix, uint64_t seq,
 
   // Delete the last sequence prefix from the iblt
   // Because we don't insert zeroth prefix in IBF so no need to delete that
-  if (oldSeq != 0) {
+  // Also don't remove jumps
+  if (oldSeq != 0 && (seq - oldSeq) == 1) {
     ndn::Name prefixWithSeq = ndn::Name(prefix).appendNumber(oldSeq);
     auto hashIt = m_prefix2hash.find(prefixWithSeq);
     if (hashIt != m_prefix2hash.end()) {
