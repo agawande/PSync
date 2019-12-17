@@ -227,9 +227,6 @@ FullProducer::sendSyncData(const ndn::Name& name, const ndn::Block& block)
   ndn::Name nameWithIblt;
   m_iblt.appendToName(nameWithIblt);
 
-  // TODO: Remove apending of hash - serves no purpose to the receiver
-  ndn::Name dataName(ndn::Name(name).appendNumber(std::hash<ndn::Name>{}(nameWithIblt)));
-
   auto compressed = compress(m_contentCompression, reinterpret_cast<const char*>(block.wire()), block.size());
   auto content = ndn::makeBinaryBlock(ndn::tlv::Content, compressed->data(), compressed->size());
 
@@ -246,14 +243,14 @@ FullProducer::sendSyncData(const ndn::Name& name, const ndn::Block& block)
     NDN_LOG_DEBUG("Sending Sync Data");
 
     // Send data after removing pending sync interest on face
-    m_segmentPublisher.publish(name, dataName, content, m_syncReplyFreshness);
+    m_segmentPublisher.publish(name, name, content, m_syncReplyFreshness);
 
     NDN_LOG_TRACE("Renewing sync interest");
     sendSyncInterest();
   }
   else {
     NDN_LOG_DEBUG("Sending Sync Data");
-    m_segmentPublisher.publish(name, dataName, content, m_syncReplyFreshness);
+    m_segmentPublisher.publish(name, name, content, m_syncReplyFreshness);
   }
 }
 
@@ -263,7 +260,8 @@ FullProducer::onSyncData(const ndn::Interest& interest, const ndn::ConstBufferPt
   deletePendingInterests(interest.getName());
 
   ndn::Block block(bufferPtr->data(), bufferPtr->size());
-  auto decompressed = decompress(m_contentCompression, reinterpret_cast<const char*>(block.value()), block.value_size());
+  auto decompressed = decompress(m_contentCompression,
+                                 reinterpret_cast<const char*>(block.value()), block.value_size());
   State state{ndn::Block(decompressed)};
 
   std::vector<MissingDataInfo> updates;

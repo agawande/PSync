@@ -26,6 +26,8 @@
 #include <ndn-cxx/name.hpp>
 #include <ndn-cxx/util/dummy-client-face.hpp>
 
+#include <iostream>
+
 namespace psync {
 
 using namespace ndn;
@@ -421,7 +423,7 @@ BOOST_AUTO_TEST_CASE(DelayedSecondSegment)
 
   // Get data name from face and increase segment number to form next interest
   Name dataName = faces[0]->sentData.front().getName();
-  Name interestName = dataName.getSubName(0, dataName.size() - 2);
+  Name interestName = dataName.getSubName(0, dataName.size() - 1);
   interestName.appendSegment(1);
   faces[0]->sentData.clear();
 
