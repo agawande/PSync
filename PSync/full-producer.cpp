@@ -122,27 +122,31 @@ FullProducer::sendSyncInterest()
 
   ndn::Interest syncInterest(syncInterestName);
 
-  using ndn::util::SegmentFetcher;
-  SegmentFetcher::Options options;
-  options.interestLifetime = m_syncInterestLifetime;
-  options.maxTimeout = m_syncInterestLifetime;
-  options.rttOptions.initialRto = m_syncInterestLifetime;
+  try {
+    using ndn::util::SegmentFetcher;
+    SegmentFetcher::Options options;
+    options.interestLifetime = m_syncInterestLifetime;
+    options.maxTimeout = m_syncInterestLifetime;
+    options.rttOptions.initialRto = m_syncInterestLifetime;
 
-  m_fetcher = SegmentFetcher::start(m_face, syncInterest,
-                                    ndn::security::v2::getAcceptAllValidator(), options);
+    m_fetcher = SegmentFetcher::start(m_face, syncInterest,
+                                      ndn::security::v2::getAcceptAllValidator(), options);
 
-  m_fetcher->onComplete.connect([this, syncInterest] (const ndn::ConstBufferPtr& bufferPtr) {
-    onSyncData(syncInterest, bufferPtr);
-  });
+    m_fetcher->onComplete.connect([this, syncInterest] (const ndn::ConstBufferPtr& bufferPtr) {
+      onSyncData(syncInterest, bufferPtr);
+    });
 
-  m_fetcher->onError.connect([this] (uint32_t errorCode, const std::string& msg) {
-    NDN_LOG_ERROR("Cannot fetch sync data, error: " << errorCode << " message: " << msg);
-    if (errorCode == SegmentFetcher::ErrorCode::NACK_ERROR) {
-      auto after = ndn::time::milliseconds(m_jitter(m_rng));
-      NDN_LOG_DEBUG("Schedule sync interest after: " << after);
-      m_scheduledSyncInterestId = m_scheduler.schedule(after, [this] { sendSyncInterest(); });
-    }
-  });
+    m_fetcher->onError.connect([this] (uint32_t errorCode, const std::string& msg) {
+      NDN_LOG_ERROR("Cannot fetch sync data, error: " << errorCode << " message: " << msg);
+      if (errorCode == SegmentFetcher::ErrorCode::NACK_ERROR) {
+        auto after = ndn::time::milliseconds(m_jitter(m_rng));
+        NDN_LOG_DEBUG("Schedule sync interest after: " << after);
+        m_scheduledSyncInterestId = m_scheduler.schedule(after, [this] { sendSyncInterest(); });
+      }
+    });
+  } catch (const std::exception& e) {
+    NDN_LOG_ERROR(e.what());
+  }
 
   NDN_LOG_DEBUG("sendFullSyncInterest, nonce: " << syncInterest.getNonce() <<
                 ", hash: " << std::hash<ndn::Name>{}(syncInterestName));
@@ -346,12 +350,19 @@ FullProducer::sendSyncData(const ndn::Name& name, const ndn::Block& block,
 void
 FullProducer::onSyncData(const ndn::Interest& interest, const ndn::ConstBufferPtr& bufferPtr)
 {
+  NDN_LOG_DEBUG("On Sync Data");
   deletePendingInterests(interest.getName());
 
-  ndn::Block block(bufferPtr->data(), bufferPtr->size());
-  auto decompressed = decompress(m_contentCompression,
-                                 reinterpret_cast<const char*>(block.value()), block.value_size());
-  State state{ndn::Block(decompressed)};
+  State state;
+  try {
+    ndn::Block block(bufferPtr->data(), bufferPtr->size());
+    auto decompressed = decompress(m_contentCompression,
+                                   reinterpret_cast<const char*>(block.value()), block.value_size());
+    state = State{ndn::Block(decompressed)};
+  } catch (const std::exception& e) {
+     NDN_LOG_ERROR(e.what());
+     return;
+  }
 
   std::vector<MissingDataInfo> updates;
 
